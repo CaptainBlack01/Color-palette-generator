@@ -1,8 +1,8 @@
 /**
- * ColorCap - Professional Color Harmony Generator
- * Core Logic: HSL-based color harmony calculations
+ * ColorCap - The Ultimate Color Harmony Generator
+ * Core Logic: HSL-based color harmony calculations with theme support
  * Supports: Monochromatic, Complementary, and Triadic harmonies
- * Features: Lock colors, format switching, copy to clipboard
+ * Features: Dark/Light mode, Lock colors, Save/Load, Copy to clipboard
  */
 
 // ============================================
@@ -13,7 +13,9 @@ const CONFIG = {
   columnCount: 5,
   formats: ['HEX', 'RGBA', 'HSL'],
   harmonies: ['monochromatic', 'complementary', 'triadic'],
-  toastDuration: 1500
+  toastDuration: 1800,
+  storageKey: 'colorCap_savedPalettes',
+  themeKey: 'colorCap_theme'
 };
 
 // ============================================
@@ -21,10 +23,13 @@ const CONFIG = {
 // ============================================
 
 const state = {
-  colors: [], // Array of HSL color objects
+  colors: [],
   currentHarmony: '',
-  selectedFormats: ['HEX', 'HEX', 'HEX', 'HEX', 'HEX'], // Format for each column
-  lockedColors: [false, false, false, false, false] // Lock state for each column
+  selectedFormats: ['HEX', 'HEX', 'HEX', 'HEX', 'HEX'],
+  lockedColors: [false, false, false, false, false],
+  savedPalettes: [],
+  currentView: 'generator',
+  theme: 'dark'
 };
 
 // ============================================
@@ -32,23 +37,88 @@ const state = {
 // ============================================
 
 const DOM = {
+  html: document.documentElement,
   colorColumns: document.getElementById('colorColumns'),
   generateBtn: document.getElementById('generateBtn'),
+  saveBtn: document.getElementById('saveBtn'),
   harmonyType: document.getElementById('harmonyType'),
-  toast: document.getElementById('toast')
+  toast: document.getElementById('toast'),
+  toastText: document.getElementById('toastText'),
+  themeToggle: document.getElementById('themeToggle'),
+
+  // Navigation
+  navGenerator: document.getElementById('navGenerator'),
+  navSaved: document.getElementById('navSaved'),
+  navAbout: document.getElementById('navAbout'),
+  savedBadge: document.getElementById('savedBadge'),
+
+  // Views
+  generatorView: document.getElementById('generatorView'),
+  savedView: document.getElementById('savedView'),
+  aboutView: document.getElementById('aboutView'),
+  savedPalettes: document.getElementById('savedPalettes'),
+  emptyState: document.getElementById('emptyState'),
+  clearAllBtn: document.getElementById('clearAllBtn'),
+  goToGenerator: document.getElementById('goToGenerator')
 };
+
+// ============================================
+// Theme Management
+// ============================================
+
+/**
+ * Initialize theme from localStorage or system preference
+ */
+function initializeTheme() {
+  // Check localStorage first
+  const savedTheme = localStorage.getItem(CONFIG.themeKey);
+
+  if (savedTheme) {
+    state.theme = savedTheme;
+  } else {
+    // Fall back to system preference
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    state.theme = prefersDark ? 'dark' : 'light';
+  }
+
+  applyTheme(state.theme);
+}
+
+/**
+ * Apply theme to the document
+ * @param {string} theme - 'dark' or 'light'
+ */
+function applyTheme(theme) {
+  DOM.html.setAttribute('data-theme', theme);
+  state.theme = theme;
+  localStorage.setItem(CONFIG.themeKey, theme);
+}
+
+/**
+ * Toggle between dark and light themes
+ */
+function toggleTheme() {
+  const newTheme = state.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(newTheme);
+}
+
+/**
+ * Listen for system theme changes
+ */
+function watchSystemTheme() {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    // Only auto-switch if user hasn't manually set a preference
+    const savedTheme = localStorage.getItem(CONFIG.themeKey);
+    if (!savedTheme) {
+      applyTheme(e.matches ? 'dark' : 'light');
+    }
+  });
+}
 
 // ============================================
 // Color Conversion Utilities
 // ============================================
 
-/**
- * Convert HSL to RGB values
- * @param {number} h - Hue (0-360)
- * @param {number} s - Saturation (0-100)
- * @param {number} l - Lightness (0-100)
- * @returns {object} RGB values {r, g, b}
- */
 function hslToRgb(h, s, l) {
   s /= 100;
   l /= 100;
@@ -80,49 +150,21 @@ function hslToRgb(h, s, l) {
   };
 }
 
-/**
- * Convert HSL to HEX string
- * @param {number} h - Hue (0-360)
- * @param {number} s - Saturation (0-100)
- * @param {number} l - Lightness (0-100)
- * @returns {string} HEX color string (e.g., "#FF5733")
- */
 function hslToHex(h, s, l) {
   const { r, g, b } = hslToRgb(h, s, l);
   const toHex = (n) => n.toString(16).padStart(2, '0').toUpperCase();
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-/**
- * Convert HSL to RGBA string
- * @param {number} h - Hue (0-360)
- * @param {number} s - Saturation (0-100)
- * @param {number} l - Lightness (0-100)
- * @param {number} a - Alpha (0-1)
- * @returns {string} RGBA color string (e.g., "rgba(255, 87, 51, 1)")
- */
 function hslToRgba(h, s, l, a = 1) {
   const { r, g, b } = hslToRgb(h, s, l);
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/**
- * Format HSL to string
- * @param {number} h - Hue (0-360)
- * @param {number} s - Saturation (0-100)
- * @param {number} l - Lightness (0-100)
- * @returns {string} HSL color string (e.g., "hsl(120, 50%, 60%)")
- */
 function hslToString(h, s, l) {
   return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
 }
 
-/**
- * Get color value in specified format
- * @param {object} color - HSL color object {h, s, l}
- * @param {string} format - Format type ('HEX', 'RGBA', 'HSL')
- * @returns {string} Formatted color string
- */
 function getColorValue(color, format) {
   switch (format) {
     case 'HEX':
@@ -140,14 +182,6 @@ function getColorValue(color, format) {
 // Luminance & Accessibility (WCAG)
 // ============================================
 
-/**
- * Calculate relative luminance of a color
- * Formula: https://www.w3.org/TR/WCAG20/#relativeluminancedef
- * @param {number} h - Hue (0-360)
- * @param {number} s - Saturation (0-100)
- * @param {number} l - Lightness (0-100)
- * @returns {number} Relative luminance (0-1)
- */
 function getRelativeLuminance(h, s, l) {
   const { r, g, b } = hslToRgb(h, s, l);
 
@@ -159,14 +193,8 @@ function getRelativeLuminance(h, s, l) {
   return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2];
 }
 
-/**
- * Determine if text should be light or dark based on background luminance
- * @param {object} color - HSL color object {h, s, l}
- * @returns {string} 'light' or 'dark'
- */
 function getTextColor(color) {
   const luminance = getRelativeLuminance(color.h, color.s, color.l);
-  // Using 0.179 as threshold (based on WCAG contrast ratio calculations)
   return luminance > 0.179 ? 'dark' : 'light';
 }
 
@@ -174,42 +202,27 @@ function getTextColor(color) {
 // Color Harmony Engine
 // ============================================
 
-/**
- * Generate a random base color in HSL
- * @returns {object} HSL color object {h, s, l}
- */
 function generateBaseColor() {
   return {
     h: Math.random() * 360,
-    s: 50 + Math.random() * 40, // 50-90% saturation for vibrant colors
-    l: 40 + Math.random() * 30  // 40-70% lightness for good visibility
+    s: 55 + Math.random() * 35, // 55-90% saturation
+    l: 42 + Math.random() * 26   // 42-68% lightness
   };
 }
 
-/**
- * Normalize hue to 0-360 range
- * @param {number} hue - Hue value
- * @returns {number} Normalized hue
- */
 function normalizeHue(hue) {
   return ((hue % 360) + 360) % 360;
 }
 
-/**
- * Generate Monochromatic harmony
- * Same hue with varying saturation and lightness
- * @param {object} baseColor - Base HSL color
- * @returns {array} Array of 5 HSL color objects
- */
 function generateMonochromatic(baseColor) {
   const colors = [];
-  const lightnessSteps = [25, 40, 55, 70, 85];
-  const saturationVariation = [-10, -5, 0, 5, 10];
+  const lightnessSteps = [28, 42, 55, 68, 82];
+  const saturationVariation = [-8, -4, 0, 4, 8];
 
   for (let i = 0; i < 5; i++) {
     colors.push({
       h: baseColor.h,
-      s: Math.max(20, Math.min(100, baseColor.s + saturationVariation[i])),
+      s: Math.max(25, Math.min(100, baseColor.s + saturationVariation[i])),
       l: lightnessSteps[i]
     });
   }
@@ -217,30 +230,18 @@ function generateMonochromatic(baseColor) {
   return colors;
 }
 
-/**
- * Generate Complementary harmony
- * Base color + complementary (180° apart) with variations
- * @param {object} baseColor - Base HSL color
- * @returns {array} Array of 5 HSL color objects
- */
 function generateComplementary(baseColor) {
   const complementaryHue = normalizeHue(baseColor.h + 180);
 
   return [
-    { h: baseColor.h, s: baseColor.s, l: 35 },
-    { h: baseColor.h, s: baseColor.s - 10, l: 55 },
-    { h: baseColor.h, s: baseColor.s - 20, l: 75 }, // Neutral bridge
-    { h: complementaryHue, s: baseColor.s - 10, l: 55 },
-    { h: complementaryHue, s: baseColor.s, l: 35 }
+    { h: baseColor.h, s: baseColor.s, l: 38 },
+    { h: baseColor.h, s: baseColor.s - 8, l: 55 },
+    { h: normalizeHue(baseColor.h + 30), s: baseColor.s - 20, l: 72 },
+    { h: complementaryHue, s: baseColor.s - 8, l: 55 },
+    { h: complementaryHue, s: baseColor.s, l: 38 }
   ];
 }
 
-/**
- * Generate Triadic harmony
- * Three colors 120° apart with two accent variations
- * @param {object} baseColor - Base HSL color
- * @returns {array} Array of 5 HSL color objects
- */
 function generateTriadic(baseColor) {
   const hue1 = baseColor.h;
   const hue2 = normalizeHue(baseColor.h + 120);
@@ -248,18 +249,13 @@ function generateTriadic(baseColor) {
 
   return [
     { h: hue1, s: baseColor.s, l: 45 },
-    { h: hue1, s: baseColor.s - 15, l: 65 },
-    { h: hue2, s: baseColor.s, l: 50 },
-    { h: hue3, s: baseColor.s, l: 50 },
-    { h: hue3, s: baseColor.s - 15, l: 65 }
+    { h: hue1, s: baseColor.s - 12, l: 65 },
+    { h: hue2, s: baseColor.s, l: 52 },
+    { h: hue3, s: baseColor.s, l: 52 },
+    { h: hue3, s: baseColor.s - 12, l: 65 }
   ];
 }
 
-/**
- * Generate color palette based on random harmony type
- * Respects locked colors - only updates unlocked positions
- * @returns {object} Object containing colors array and harmony type
- */
 function generatePalette() {
   const baseColor = generateBaseColor();
   const harmonyIndex = Math.floor(Math.random() * CONFIG.harmonies.length);
@@ -281,10 +277,9 @@ function generatePalette() {
       newColors = generateMonochromatic(baseColor);
   }
 
-  // Merge with locked colors
   const colors = newColors.map((color, index) => {
     if (state.lockedColors[index] && state.colors[index]) {
-      return state.colors[index]; // Keep locked color
+      return state.colors[index];
     }
     return color;
   });
@@ -293,14 +288,150 @@ function generatePalette() {
 }
 
 // ============================================
+// LocalStorage - Save/Load Palettes
+// ============================================
+
+function loadSavedPalettes() {
+  try {
+    const saved = localStorage.getItem(CONFIG.storageKey);
+    state.savedPalettes = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    state.savedPalettes = [];
+  }
+  updateSavedBadge();
+}
+
+function savePalettesToStorage() {
+  try {
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(state.savedPalettes));
+  } catch (e) {
+    console.error('Failed to save palettes:', e);
+  }
+}
+
+function saveCurrentPalette() {
+  if (state.colors.length === 0) return;
+
+  const palette = {
+    id: Date.now(),
+    colors: [...state.colors],
+    harmony: state.currentHarmony,
+    date: new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  };
+
+  state.savedPalettes.unshift(palette);
+  savePalettesToStorage();
+  updateSavedBadge();
+  showToast('Palette saved! ✨');
+}
+
+function deletePalette(id) {
+  state.savedPalettes = state.savedPalettes.filter(p => p.id !== id);
+  savePalettesToStorage();
+  updateSavedBadge();
+  renderSavedPalettes();
+}
+
+function loadPalette(id) {
+  const palette = state.savedPalettes.find(p => p.id === id);
+  if (palette) {
+    state.colors = [...palette.colors];
+    state.currentHarmony = palette.harmony;
+    state.lockedColors = [false, false, false, false, false];
+
+    showView('generator');
+    updateAllColumns();
+    updateHarmonyIndicator(palette.harmony);
+    showToast('Palette loaded! 🎨');
+  }
+}
+
+function clearAllPalettes() {
+  if (state.savedPalettes.length === 0) return;
+
+  state.savedPalettes = [];
+  savePalettesToStorage();
+  updateSavedBadge();
+  renderSavedPalettes();
+  showToast('All palettes cleared');
+}
+
+function updateSavedBadge() {
+  DOM.savedBadge.textContent = state.savedPalettes.length;
+}
+
+// ============================================
+// View Management
+// ============================================
+
+function showView(viewName) {
+  state.currentView = viewName;
+
+  DOM.generatorView.classList.add('hidden');
+  DOM.savedView.classList.add('hidden');
+  DOM.aboutView.classList.add('hidden');
+
+  DOM.navGenerator.classList.remove('active');
+  DOM.navSaved.classList.remove('active');
+  DOM.navAbout.classList.remove('active');
+
+  switch (viewName) {
+    case 'generator':
+      DOM.generatorView.classList.remove('hidden');
+      DOM.navGenerator.classList.add('active');
+      break;
+    case 'saved':
+      DOM.savedView.classList.remove('hidden');
+      DOM.navSaved.classList.add('active');
+      renderSavedPalettes();
+      break;
+    case 'about':
+      DOM.aboutView.classList.remove('hidden');
+      DOM.navAbout.classList.add('active');
+      break;
+  }
+}
+
+function renderSavedPalettes() {
+  if (state.savedPalettes.length === 0) {
+    DOM.savedPalettes.innerHTML = '';
+    DOM.emptyState.classList.remove('hidden');
+    return;
+  }
+
+  DOM.emptyState.classList.add('hidden');
+
+  const html = state.savedPalettes.map(palette => `
+        <div class="saved-palette-card" data-id="${palette.id}">
+            <div class="saved-palette-preview">
+                ${palette.colors.map(color => `
+                    <div class="color-swatch" style="background-color: ${hslToHex(color.h, color.s, color.l)}"></div>
+                `).join('')}
+            </div>
+            <div class="saved-palette-info">
+                <div class="saved-palette-meta">
+                    <span class="saved-palette-harmony">${palette.harmony}</span>
+                    <span class="saved-palette-date">${palette.date}</span>
+                </div>
+                <div class="saved-palette-actions">
+                    <button class="load-btn" data-id="${palette.id}">Load</button>
+                    <button class="delete-btn" data-id="${palette.id}">✕</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+  DOM.savedPalettes.innerHTML = html;
+}
+
+// ============================================
 // UI Rendering
 // ============================================
 
-/**
- * Create HTML for a single color column
- * @param {number} index - Column index
- * @returns {string} HTML string
- */
 function createColumnHTML(index) {
   const isLocked = state.lockedColors[index];
   return `
@@ -324,16 +455,13 @@ function createColumnHTML(index) {
                     ${isLocked ? '🔒' : '🔓'}
                 </button>
                 <button class="copy-btn" data-index="${index}" title="Copy to clipboard">
-                    ⧉
+                    📋
                 </button>
             </div>
         </div>
     `;
 }
 
-/**
- * Initialize color columns in the DOM
- */
 function initializeColumns() {
   let columnsHTML = '';
   for (let i = 0; i < CONFIG.columnCount; i++) {
@@ -342,52 +470,30 @@ function initializeColumns() {
   DOM.colorColumns.innerHTML = columnsHTML;
 }
 
-/**
- * Update the display of a single column
- * @param {number} index - Column index
- */
 function updateColumnDisplay(index) {
   const column = document.querySelector(`.color-column[data-index="${index}"]`);
   const colorValue = column.querySelector('.color-value');
   const color = state.colors[index];
   const format = state.selectedFormats[index];
 
-  // Update background color
   column.style.backgroundColor = hslToHex(color.h, color.s, color.l);
-
-  // Update color value text
   colorValue.textContent = getColorValue(color, format);
 
-  // Update text color based on luminance (WCAG)
   const textColorClass = getTextColor(color);
   column.classList.remove('text-light', 'text-dark');
   column.classList.add(`text-${textColorClass}`);
 }
 
-/**
- * Update all columns display
- */
 function updateAllColumns() {
   for (let i = 0; i < CONFIG.columnCount; i++) {
     updateColumnDisplay(i);
   }
 }
 
-/**
- * Update harmony indicator
- * @param {string} harmonyType - Type of harmony
- */
 function updateHarmonyIndicator(harmonyType) {
   DOM.harmonyType.textContent = harmonyType;
-  DOM.harmonyType.style.animation = 'none';
-  DOM.harmonyType.offsetHeight; // Trigger reflow
-  DOM.harmonyType.style.animation = 'pulse 0.5s ease';
 }
 
-/**
- * Update lock button visual state
- * @param {number} index - Column index
- */
 function updateLockButton(index) {
   const column = document.querySelector(`.color-column[data-index="${index}"]`);
   const lockBtn = column.querySelector('.lock-btn');
@@ -402,9 +508,6 @@ function updateLockButton(index) {
 // Event Handlers
 // ============================================
 
-/**
- * Handle generate button click
- */
 function handleGenerate() {
   const { colors, harmonyType } = generatePalette();
   state.colors = colors;
@@ -414,36 +517,23 @@ function handleGenerate() {
   updateHarmonyIndicator(harmonyType);
 }
 
-/**
- * Handle lock button click
- * @param {Event} event - Click event
- */
 function handleLockToggle(event) {
   const btn = event.target.closest('.lock-btn');
   if (!btn) return;
 
   const index = parseInt(btn.dataset.index);
-
-  // Toggle lock state
   state.lockedColors[index] = !state.lockedColors[index];
-
-  // Update button visual
   updateLockButton(index);
 
   event.stopPropagation();
 }
 
-/**
- * Handle dropdown toggle
- * @param {Event} event - Click event
- */
 function handleDropdownToggle(event) {
   const btn = event.target.closest('.dropdown-btn');
   if (!btn) return;
 
   const container = btn.closest('.dropdown-container');
 
-  // Close all other dropdowns
   document.querySelectorAll('.dropdown-container.open').forEach(el => {
     if (el !== container) el.classList.remove('open');
   });
@@ -452,10 +542,6 @@ function handleDropdownToggle(event) {
   event.stopPropagation();
 }
 
-/**
- * Handle format selection from dropdown
- * @param {Event} event - Click event
- */
 function handleFormatSelect(event) {
   const item = event.target.closest('.dropdown-item');
   if (!item) return;
@@ -464,10 +550,8 @@ function handleFormatSelect(event) {
   const index = parseInt(container.dataset.index);
   const format = item.dataset.format;
 
-  // Update state
   state.selectedFormats[index] = format;
 
-  // Update UI
   container.querySelectorAll('.dropdown-item').forEach(el => {
     el.classList.remove('active');
   });
@@ -476,7 +560,6 @@ function handleFormatSelect(event) {
   container.querySelector('.current-format').textContent = format;
   container.classList.remove('open');
 
-  // Update color value display
   if (state.colors.length > 0) {
     updateColumnDisplay(index);
   }
@@ -484,10 +567,6 @@ function handleFormatSelect(event) {
   event.stopPropagation();
 }
 
-/**
- * Handle copy button click
- * @param {Event} event - Click event
- */
 function handleCopy(event) {
   const btn = event.target.closest('.copy-btn');
   if (!btn) return;
@@ -500,19 +579,15 @@ function handleCopy(event) {
   const format = state.selectedFormats[index];
   const value = getColorValue(color, format);
 
-  // Copy to clipboard
   navigator.clipboard.writeText(value).then(() => {
-    // Show visual feedback on button
     btn.classList.add('copied');
     btn.textContent = '✓';
 
-    // Show toast
-    showToast();
+    showToast('Copied to clipboard!');
 
-    // Reset button after delay
     setTimeout(() => {
       btn.classList.remove('copied');
-      btn.textContent = '⧉';
+      btn.textContent = '📋';
     }, CONFIG.toastDuration);
   }).catch(err => {
     console.error('Failed to copy:', err);
@@ -521,10 +596,6 @@ function handleCopy(event) {
   event.stopPropagation();
 }
 
-/**
- * Close dropdowns when clicking outside
- * @param {Event} event - Click event
- */
 function handleOutsideClick(event) {
   if (!event.target.closest('.dropdown-container')) {
     document.querySelectorAll('.dropdown-container.open').forEach(el => {
@@ -533,10 +604,8 @@ function handleOutsideClick(event) {
   }
 }
 
-/**
- * Show toast notification
- */
-function showToast() {
+function showToast(message = 'Copied!') {
+  DOM.toastText.textContent = message;
   DOM.toast.classList.add('show');
 
   setTimeout(() => {
@@ -549,32 +618,63 @@ function showToast() {
 // ============================================
 
 function setupEventListeners() {
+  // Theme toggle
+  DOM.themeToggle.addEventListener('click', toggleTheme);
+
   // Generate button
   DOM.generateBtn.addEventListener('click', handleGenerate);
 
-  // Event delegation for color columns container
+  // Save button
+  DOM.saveBtn.addEventListener('click', saveCurrentPalette);
+
+  // Navigation
+  DOM.navGenerator.addEventListener('click', () => showView('generator'));
+  DOM.navSaved.addEventListener('click', () => showView('saved'));
+  DOM.navAbout.addEventListener('click', () => showView('about'));
+
+  // Go to generator from empty state
+  if (DOM.goToGenerator) {
+    DOM.goToGenerator.addEventListener('click', () => showView('generator'));
+  }
+
+  // Clear all button
+  DOM.clearAllBtn.addEventListener('click', clearAllPalettes);
+
+  // Event delegation for color columns
   DOM.colorColumns.addEventListener('click', (event) => {
-    // Handle lock button clicks
     if (event.target.closest('.lock-btn')) {
       handleLockToggle(event);
       return;
     }
 
-    // Handle dropdown button clicks
     if (event.target.closest('.dropdown-btn')) {
       handleDropdownToggle(event);
       return;
     }
 
-    // Handle format selection
     if (event.target.closest('.dropdown-item')) {
       handleFormatSelect(event);
       return;
     }
 
-    // Handle copy button clicks
     if (event.target.closest('.copy-btn')) {
       handleCopy(event);
+      return;
+    }
+  });
+
+  // Event delegation for saved palettes
+  DOM.savedPalettes.addEventListener('click', (event) => {
+    const loadBtn = event.target.closest('.load-btn');
+    const deleteBtn = event.target.closest('.delete-btn');
+
+    if (loadBtn) {
+      loadPalette(parseInt(loadBtn.dataset.id));
+      return;
+    }
+
+    if (deleteBtn) {
+      deletePalette(parseInt(deleteBtn.dataset.id));
       return;
     }
   });
@@ -582,11 +682,19 @@ function setupEventListeners() {
   // Close dropdowns on outside click
   document.addEventListener('click', handleOutsideClick);
 
-  // Keyboard shortcut: Press 'Space' to generate
+  // Keyboard shortcuts
   document.addEventListener('keydown', (event) => {
+    // Space to generate (only in generator view)
     if (event.code === 'Space' && !event.target.closest('button, input, textarea')) {
       event.preventDefault();
-      handleGenerate();
+      if (state.currentView === 'generator') {
+        handleGenerate();
+      }
+    }
+
+    // T to toggle theme
+    if (event.code === 'KeyT' && !event.target.closest('input, textarea')) {
+      toggleTheme();
     }
   });
 }
@@ -596,12 +704,12 @@ function setupEventListeners() {
 // ============================================
 
 function init() {
+  initializeTheme();
+  watchSystemTheme();
   initializeColumns();
+  loadSavedPalettes();
   setupEventListeners();
-
-  // Generate initial palette
   handleGenerate();
 }
 
-// Start the application when DOM is ready
 document.addEventListener('DOMContentLoaded', init);
