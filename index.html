@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description"
         content="ColorCap - The ultimate color harmony generator. Create stunning color palettes using mathematical harmony standards.">
     <title>ColorCap | The Ultimate Color Harmony Generator</title>
@@ -30,7 +30,7 @@
                 <h1>colorCap</h1>
                 <span class="brand-tag">PRO</span>
             </div>
-            <nav class="nav-links">
+            <nav class="nav-links" id="mainNav">
                 <button class="nav-link active" id="navGenerator">
                     <span class="nav-icon">🎨</span>
                     <span class="nav-text">Generator</span>
@@ -51,8 +51,50 @@
                     <span class="theme-icon-light">☀️</span>
                     <span class="theme-toggle-slider"></span>
                 </button>
+
+                <!-- Auth Buttons (shown when logged out) -->
+                <div class="auth-buttons" id="authButtons">
+                    <button class="btn-secondary" id="loginBtn">Log In</button>
+                    <button class="btn-primary" id="signupBtn">Sign Up</button>
+                </div>
+
+                <!-- User Profile (shown when logged in) -->
+                <div class="user-profile hidden" id="userProfile">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-dropdown" id="userDropdown">
+                        <div class="user-info">
+                            <span class="user-name" id="userName">User</span>
+                            <span class="user-email" id="userEmail">user@email.com</span>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-action" id="logoutBtn">
+                            <span>🚪</span>
+                            <span>Log Out</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mobile Menu Toggle -->
+                <button class="mobile-menu-toggle" id="mobileMenuToggle">
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                    <span class="hamburger-line"></span>
+                </button>
             </div>
         </div>
+
+        <!-- Mobile Navigation -->
+        <nav class="mobile-nav hidden" id="mobileNav">
+            <button class="mobile-nav-link active" data-view="generator">
+                <span>🎨</span> Generator
+            </button>
+            <button class="mobile-nav-link" data-view="saved">
+                <span>💾</span> Saved <span class="badge mobile-badge" id="savedBadgeMobile">0</span>
+            </button>
+            <button class="mobile-nav-link" data-view="about">
+                <span>ℹ️</span> About
+            </button>
+        </nav>
     </header>
 
     <!-- Main Content Area -->
@@ -87,7 +129,7 @@
                                 <span>Generate</span>
                             </span>
                         </button>
-                        <p class="hint-text">Press <kbd>Space</kbd> for quick generate</p>
+                        <p class="hint-text"><kbd>Space</kbd> to generate</p>
                     </div>
                     <div class="control-right">
                         <button class="save-btn" id="saveBtn">
@@ -111,21 +153,21 @@
                     <div class="feature-icon">🔒</div>
                     <div class="feature-content">
                         <h4>Lock Colors</h4>
-                        <p>Keep your favorites while generating new ones</p>
+                        <p>Keep favorites while generating</p>
                     </div>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">📋</div>
                     <div class="feature-content">
                         <h4>One-Click Copy</h4>
-                        <p>Copy in HEX, RGBA, or HSL format instantly</p>
+                        <p>HEX, RGBA, or HSL formats</p>
                     </div>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🎯</div>
                     <div class="feature-content">
                         <h4>Color Theory</h4>
-                        <p>Mathematically perfect harmonies every time</p>
+                        <p>Math-based harmonies</p>
                     </div>
                 </div>
             </section>
@@ -137,20 +179,18 @@
                 <div class="section-header">
                     <div class="section-title">
                         <h2>Your Collection</h2>
-                        <p class="section-subtitle">Saved color palettes ready to use</p>
+                        <p class="section-subtitle">Saved color palettes</p>
                     </div>
                     <button class="danger-btn" id="clearAllBtn">
                         <span>🗑️</span>
-                        <span>Clear All</span>
+                        <span class="btn-text-desktop">Clear All</span>
                     </button>
                 </div>
-                <div class="saved-palettes" id="savedPalettes">
-                    <!-- Saved palettes will be rendered here -->
-                </div>
+                <div class="saved-palettes" id="savedPalettes"></div>
                 <div class="empty-state" id="emptyState">
                     <div class="empty-illustration">📁</div>
                     <h3>No Saved Palettes Yet</h3>
-                    <p>Start creating and save your favorite color combinations!</p>
+                    <p>Create and save your favorite color combinations!</p>
                     <button class="cta-btn" id="goToGenerator">
                         <span>✦</span>
                         <span>Create Palette</span>
@@ -173,8 +213,7 @@
                 <div class="about-grid">
                     <div class="about-card">
                         <h3>What is ColorCap?</h3>
-                        <p>ColorCap is a professional-grade color palette generator that uses mathematical color theory
-                            to create visually stunning and harmonious color combinations.</p>
+                        <p>A professional color palette generator using mathematical color theory.</p>
                     </div>
 
                     <div class="about-card">
@@ -184,18 +223,17 @@
                             <span class="harmony-tag comp">Complementary</span>
                             <span class="harmony-tag tri">Triadic</span>
                         </div>
-                        <p>Each harmony type uses HSL mathematics to ensure perfect color relationships.</p>
                     </div>
 
                     <div class="about-card features-about">
                         <h3>Features</h3>
                         <ul class="features-list">
-                            <li>🎨 5-color harmonious palettes</li>
-                            <li>🔒 Lock individual colors</li>
-                            <li>📋 HEX, RGBA, HSL formats</li>
-                            <li>💾 Save & load palettes</li>
-                            <li>🌙 Dark & light modes</li>
-                            <li>♿ WCAG accessibility</li>
+                            <li>🎨 5-color palettes</li>
+                            <li>🔒 Lock colors</li>
+                            <li>📋 Multiple formats</li>
+                            <li>💾 Save palettes</li>
+                            <li>🌙 Dark/Light mode</li>
+                            <li>👤 User accounts</li>
                         </ul>
                     </div>
 
@@ -205,7 +243,6 @@
                             <span class="tech-badge">HTML5</span>
                             <span class="tech-badge">CSS3</span>
                             <span class="tech-badge">Vanilla JS</span>
-                            <span class="tech-badge">HSL Math</span>
                         </div>
                     </div>
                 </div>
@@ -216,9 +253,75 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-content">
-            <p>ColorCap © 2026 — Crafted with ♥ for designers & developers</p>
+            <p>ColorCap © 2026 — Crafted with ♥ for designers</p>
         </div>
     </footer>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay hidden" id="authModal">
+        <div class="modal">
+            <button class="modal-close" id="modalClose">×</button>
+
+            <!-- Login Form -->
+            <div class="auth-form" id="loginForm">
+                <h2 class="modal-title">Welcome Back</h2>
+                <p class="modal-subtitle">Log in to save and sync your palettes</p>
+
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" placeholder="Enter your email" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password"
+                        autocomplete="current-password">
+                </div>
+
+                <div class="form-error hidden" id="loginError">Invalid email or password</div>
+
+                <button class="form-submit" id="loginSubmit">
+                    <span>Log In</span>
+                </button>
+
+                <p class="form-switch">
+                    Don't have an account? <button class="link-btn" id="switchToSignup">Sign up</button>
+                </p>
+            </div>
+
+            <!-- Signup Form -->
+            <div class="auth-form hidden" id="signupForm">
+                <h2 class="modal-title">Create Account</h2>
+                <p class="modal-subtitle">Join ColorCap to save your palettes</p>
+
+                <div class="form-group">
+                    <label for="signupName">Name</label>
+                    <input type="text" id="signupName" placeholder="Enter your name" autocomplete="name">
+                </div>
+
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" placeholder="Enter your email" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" placeholder="Create a password"
+                        autocomplete="new-password">
+                </div>
+
+                <div class="form-error hidden" id="signupError">Please fill all fields</div>
+
+                <button class="form-submit" id="signupSubmit">
+                    <span>Create Account</span>
+                </button>
+
+                <p class="form-switch">
+                    Already have an account? <button class="link-btn" id="switchToLogin">Log in</button>
+                </p>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notification -->
     <div class="toast" id="toast">

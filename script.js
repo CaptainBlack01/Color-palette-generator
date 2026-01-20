@@ -1,8 +1,6 @@
 /**
  * ColorCap - The Ultimate Color Harmony Generator
- * Core Logic: HSL-based color harmony calculations with theme support
- * Supports: Monochromatic, Complementary, and Triadic harmonies
- * Features: Dark/Light mode, Lock colors, Save/Load, Copy to clipboard
+ * Features: Authentication, Dark/Light mode, Responsive, Save/Load palettes
  */
 
 // ============================================
@@ -15,7 +13,9 @@ const CONFIG = {
   harmonies: ['monochromatic', 'complementary', 'triadic'],
   toastDuration: 1800,
   storageKey: 'colorCap_savedPalettes',
-  themeKey: 'colorCap_theme'
+  themeKey: 'colorCap_theme',
+  usersKey: 'colorCap_users',
+  currentUserKey: 'colorCap_currentUser'
 };
 
 // ============================================
@@ -29,7 +29,9 @@ const state = {
   lockedColors: [false, false, false, false, false],
   savedPalettes: [],
   currentView: 'generator',
-  theme: 'dark'
+  theme: 'dark',
+  currentUser: null,
+  mobileMenuOpen: false
 };
 
 // ============================================
@@ -51,6 +53,11 @@ const DOM = {
   navSaved: document.getElementById('navSaved'),
   navAbout: document.getElementById('navAbout'),
   savedBadge: document.getElementById('savedBadge'),
+  savedBadgeMobile: document.getElementById('savedBadgeMobile'),
+
+  // Mobile
+  mobileMenuToggle: document.getElementById('mobileMenuToggle'),
+  mobileNav: document.getElementById('mobileNav'),
 
   // Views
   generatorView: document.getElementById('generatorView'),
@@ -59,24 +66,48 @@ const DOM = {
   savedPalettes: document.getElementById('savedPalettes'),
   emptyState: document.getElementById('emptyState'),
   clearAllBtn: document.getElementById('clearAllBtn'),
-  goToGenerator: document.getElementById('goToGenerator')
+  goToGenerator: document.getElementById('goToGenerator'),
+
+  // Auth
+  authButtons: document.getElementById('authButtons'),
+  userProfile: document.getElementById('userProfile'),
+  userAvatar: document.getElementById('userAvatar'),
+  userName: document.getElementById('userName'),
+  userEmail: document.getElementById('userEmail'),
+  loginBtn: document.getElementById('loginBtn'),
+  signupBtn: document.getElementById('signupBtn'),
+  logoutBtn: document.getElementById('logoutBtn'),
+
+  // Modal
+  authModal: document.getElementById('authModal'),
+  modalClose: document.getElementById('modalClose'),
+  loginForm: document.getElementById('loginForm'),
+  signupForm: document.getElementById('signupForm'),
+  switchToSignup: document.getElementById('switchToSignup'),
+  switchToLogin: document.getElementById('switchToLogin'),
+
+  // Form inputs
+  loginEmail: document.getElementById('loginEmail'),
+  loginPassword: document.getElementById('loginPassword'),
+  loginError: document.getElementById('loginError'),
+  loginSubmit: document.getElementById('loginSubmit'),
+  signupName: document.getElementById('signupName'),
+  signupEmail: document.getElementById('signupEmail'),
+  signupPassword: document.getElementById('signupPassword'),
+  signupError: document.getElementById('signupError'),
+  signupSubmit: document.getElementById('signupSubmit')
 };
 
 // ============================================
 // Theme Management
 // ============================================
 
-/**
- * Initialize theme from localStorage or system preference
- */
 function initializeTheme() {
-  // Check localStorage first
   const savedTheme = localStorage.getItem(CONFIG.themeKey);
 
   if (savedTheme) {
     state.theme = savedTheme;
   } else {
-    // Fall back to system preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     state.theme = prefersDark ? 'dark' : 'light';
   }
@@ -84,35 +115,251 @@ function initializeTheme() {
   applyTheme(state.theme);
 }
 
-/**
- * Apply theme to the document
- * @param {string} theme - 'dark' or 'light'
- */
 function applyTheme(theme) {
   DOM.html.setAttribute('data-theme', theme);
   state.theme = theme;
   localStorage.setItem(CONFIG.themeKey, theme);
 }
 
-/**
- * Toggle between dark and light themes
- */
 function toggleTheme() {
   const newTheme = state.theme === 'dark' ? 'light' : 'dark';
   applyTheme(newTheme);
 }
 
-/**
- * Listen for system theme changes
- */
 function watchSystemTheme() {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    // Only auto-switch if user hasn't manually set a preference
     const savedTheme = localStorage.getItem(CONFIG.themeKey);
     if (!savedTheme) {
       applyTheme(e.matches ? 'dark' : 'light');
     }
   });
+}
+
+// ============================================
+// Authentication System (localStorage-based)
+// ============================================
+
+function getUsers() {
+  try {
+    const users = localStorage.getItem(CONFIG.usersKey);
+    return users ? JSON.parse(users) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveUsers(users) {
+  localStorage.setItem(CONFIG.usersKey, JSON.stringify(users));
+}
+
+function getCurrentUser() {
+  try {
+    const user = localStorage.getItem(CONFIG.currentUserKey);
+    return user ? JSON.parse(user) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCurrentUser(user) {
+  if (user) {
+    localStorage.setItem(CONFIG.currentUserKey, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(CONFIG.currentUserKey);
+  }
+  state.currentUser = user;
+  updateAuthUI();
+}
+
+function signup(name, email, password) {
+  if (!name || !email || !password) {
+    return { success: false, message: 'Please fill all fields' };
+  }
+
+  if (!isValidEmail(email)) {
+    return { success: false, message: 'Invalid email format' };
+  }
+
+  if (password.length < 4) {
+    return { success: false, message: 'Password too short (min 4 chars)' };
+  }
+
+  const users = getUsers();
+
+  if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+    return { success: false, message: 'Email already registered' };
+  }
+
+  const newUser = {
+    id: Date.now(),
+    name: name.trim(),
+    email: email.toLowerCase().trim(),
+    password: password, // In real app, this should be hashed
+    createdAt: new Date().toISOString()
+  };
+
+  users.push(newUser);
+  saveUsers(users);
+
+  const { password: _, ...userWithoutPassword } = newUser;
+  setCurrentUser(userWithoutPassword);
+
+  return { success: true };
+}
+
+function login(email, password) {
+  if (!email || !password) {
+    return { success: false, message: 'Please fill all fields' };
+  }
+
+  const users = getUsers();
+  const user = users.find(u =>
+    u.email.toLowerCase() === email.toLowerCase() &&
+    u.password === password
+  );
+
+  if (!user) {
+    return { success: false, message: 'Invalid email or password' };
+  }
+
+  const { password: _, ...userWithoutPassword } = user;
+  setCurrentUser(userWithoutPassword);
+
+  return { success: true };
+}
+
+function logout() {
+  setCurrentUser(null);
+  showToast('Logged out successfully');
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function updateAuthUI() {
+  if (state.currentUser) {
+    DOM.authButtons.classList.add('hidden');
+    DOM.userProfile.classList.remove('hidden');
+
+    const initials = state.currentUser.name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+    DOM.userAvatar.textContent = initials;
+    DOM.userName.textContent = state.currentUser.name;
+    DOM.userEmail.textContent = state.currentUser.email;
+  } else {
+    DOM.authButtons.classList.remove('hidden');
+    DOM.userProfile.classList.add('hidden');
+  }
+}
+
+function initializeAuth() {
+  state.currentUser = getCurrentUser();
+  updateAuthUI();
+}
+
+// ============================================
+// Modal Management
+// ============================================
+
+function openModal(formType = 'login') {
+  DOM.authModal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
+  if (formType === 'login') {
+    DOM.loginForm.classList.remove('hidden');
+    DOM.signupForm.classList.add('hidden');
+    DOM.loginEmail.focus();
+  } else {
+    DOM.loginForm.classList.add('hidden');
+    DOM.signupForm.classList.remove('hidden');
+    DOM.signupName.focus();
+  }
+
+  clearFormErrors();
+}
+
+function closeModal() {
+  DOM.authModal.classList.add('hidden');
+  document.body.style.overflow = '';
+  clearFormInputs();
+  clearFormErrors();
+}
+
+function clearFormInputs() {
+  DOM.loginEmail.value = '';
+  DOM.loginPassword.value = '';
+  DOM.signupName.value = '';
+  DOM.signupEmail.value = '';
+  DOM.signupPassword.value = '';
+}
+
+function clearFormErrors() {
+  DOM.loginError.classList.add('hidden');
+  DOM.signupError.classList.add('hidden');
+}
+
+function showFormError(type, message) {
+  if (type === 'login') {
+    DOM.loginError.textContent = message;
+    DOM.loginError.classList.remove('hidden');
+  } else {
+    DOM.signupError.textContent = message;
+    DOM.signupError.classList.remove('hidden');
+  }
+}
+
+function handleLoginSubmit(e) {
+  e.preventDefault();
+  clearFormErrors();
+
+  const result = login(DOM.loginEmail.value, DOM.loginPassword.value);
+
+  if (result.success) {
+    closeModal();
+    showToast(`Welcome back, ${state.currentUser.name}! 👋`);
+  } else {
+    showFormError('login', result.message);
+  }
+}
+
+function handleSignupSubmit(e) {
+  e.preventDefault();
+  clearFormErrors();
+
+  const result = signup(
+    DOM.signupName.value,
+    DOM.signupEmail.value,
+    DOM.signupPassword.value
+  );
+
+  if (result.success) {
+    closeModal();
+    showToast(`Welcome, ${state.currentUser.name}! 🎉`);
+  } else {
+    showFormError('signup', result.message);
+  }
+}
+
+// ============================================
+// Mobile Menu
+// ============================================
+
+function toggleMobileMenu() {
+  state.mobileMenuOpen = !state.mobileMenuOpen;
+  DOM.mobileMenuToggle.classList.toggle('active', state.mobileMenuOpen);
+  DOM.mobileNav.classList.toggle('hidden', !state.mobileMenuOpen);
+}
+
+function closeMobileMenu() {
+  state.mobileMenuOpen = false;
+  DOM.mobileMenuToggle.classList.remove('active');
+  DOM.mobileNav.classList.add('hidden');
 }
 
 // ============================================
@@ -129,19 +376,12 @@ function hslToRgb(h, s, l) {
 
   let r = 0, g = 0, b = 0;
 
-  if (0 <= h && h < 60) {
-    r = c; g = x; b = 0;
-  } else if (60 <= h && h < 120) {
-    r = x; g = c; b = 0;
-  } else if (120 <= h && h < 180) {
-    r = 0; g = c; b = x;
-  } else if (180 <= h && h < 240) {
-    r = 0; g = x; b = c;
-  } else if (240 <= h && h < 300) {
-    r = x; g = 0; b = c;
-  } else if (300 <= h && h < 360) {
-    r = c; g = 0; b = x;
-  }
+  if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+  else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+  else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+  else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+  else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+  else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
 
   return {
     r: Math.round((r + m) * 255),
@@ -167,14 +407,10 @@ function hslToString(h, s, l) {
 
 function getColorValue(color, format) {
   switch (format) {
-    case 'HEX':
-      return hslToHex(color.h, color.s, color.l);
-    case 'RGBA':
-      return hslToRgba(color.h, color.s, color.l);
-    case 'HSL':
-      return hslToString(color.h, color.s, color.l);
-    default:
-      return hslToHex(color.h, color.s, color.l);
+    case 'HEX': return hslToHex(color.h, color.s, color.l);
+    case 'RGBA': return hslToRgba(color.h, color.s, color.l);
+    case 'HSL': return hslToString(color.h, color.s, color.l);
+    default: return hslToHex(color.h, color.s, color.l);
   }
 }
 
@@ -184,12 +420,10 @@ function getColorValue(color, format) {
 
 function getRelativeLuminance(h, s, l) {
   const { r, g, b } = hslToRgb(h, s, l);
-
   const sRGB = [r, g, b].map(c => {
     c /= 255;
     return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   });
-
   return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2];
 }
 
@@ -205,8 +439,8 @@ function getTextColor(color) {
 function generateBaseColor() {
   return {
     h: Math.random() * 360,
-    s: 55 + Math.random() * 35, // 55-90% saturation
-    l: 42 + Math.random() * 26   // 42-68% lightness
+    s: 55 + Math.random() * 35,
+    l: 42 + Math.random() * 26
   };
 }
 
@@ -215,44 +449,36 @@ function normalizeHue(hue) {
 }
 
 function generateMonochromatic(baseColor) {
-  const colors = [];
   const lightnessSteps = [28, 42, 55, 68, 82];
   const saturationVariation = [-8, -4, 0, 4, 8];
-
-  for (let i = 0; i < 5; i++) {
-    colors.push({
-      h: baseColor.h,
-      s: Math.max(25, Math.min(100, baseColor.s + saturationVariation[i])),
-      l: lightnessSteps[i]
-    });
-  }
-
-  return colors;
+  return lightnessSteps.map((l, i) => ({
+    h: baseColor.h,
+    s: Math.max(25, Math.min(100, baseColor.s + saturationVariation[i])),
+    l: l
+  }));
 }
 
 function generateComplementary(baseColor) {
-  const complementaryHue = normalizeHue(baseColor.h + 180);
-
+  const comp = normalizeHue(baseColor.h + 180);
   return [
     { h: baseColor.h, s: baseColor.s, l: 38 },
     { h: baseColor.h, s: baseColor.s - 8, l: 55 },
     { h: normalizeHue(baseColor.h + 30), s: baseColor.s - 20, l: 72 },
-    { h: complementaryHue, s: baseColor.s - 8, l: 55 },
-    { h: complementaryHue, s: baseColor.s, l: 38 }
+    { h: comp, s: baseColor.s - 8, l: 55 },
+    { h: comp, s: baseColor.s, l: 38 }
   ];
 }
 
 function generateTriadic(baseColor) {
-  const hue1 = baseColor.h;
-  const hue2 = normalizeHue(baseColor.h + 120);
-  const hue3 = normalizeHue(baseColor.h + 240);
-
+  const h1 = baseColor.h;
+  const h2 = normalizeHue(baseColor.h + 120);
+  const h3 = normalizeHue(baseColor.h + 240);
   return [
-    { h: hue1, s: baseColor.s, l: 45 },
-    { h: hue1, s: baseColor.s - 12, l: 65 },
-    { h: hue2, s: baseColor.s, l: 52 },
-    { h: hue3, s: baseColor.s, l: 52 },
-    { h: hue3, s: baseColor.s - 12, l: 65 }
+    { h: h1, s: baseColor.s, l: 45 },
+    { h: h1, s: baseColor.s - 12, l: 65 },
+    { h: h2, s: baseColor.s, l: 52 },
+    { h: h3, s: baseColor.s, l: 52 },
+    { h: h3, s: baseColor.s - 12, l: 65 }
   ];
 }
 
@@ -262,27 +488,16 @@ function generatePalette() {
   const harmonyType = CONFIG.harmonies[harmonyIndex];
 
   let newColors;
-
   switch (harmonyType) {
-    case 'monochromatic':
-      newColors = generateMonochromatic(baseColor);
-      break;
-    case 'complementary':
-      newColors = generateComplementary(baseColor);
-      break;
-    case 'triadic':
-      newColors = generateTriadic(baseColor);
-      break;
-    default:
-      newColors = generateMonochromatic(baseColor);
+    case 'monochromatic': newColors = generateMonochromatic(baseColor); break;
+    case 'complementary': newColors = generateComplementary(baseColor); break;
+    case 'triadic': newColors = generateTriadic(baseColor); break;
+    default: newColors = generateMonochromatic(baseColor);
   }
 
-  const colors = newColors.map((color, index) => {
-    if (state.lockedColors[index] && state.colors[index]) {
-      return state.colors[index];
-    }
-    return color;
-  });
+  const colors = newColors.map((color, i) =>
+    (state.lockedColors[i] && state.colors[i]) ? state.colors[i] : color
+  );
 
   return { colors, harmonyType };
 }
@@ -291,9 +506,14 @@ function generatePalette() {
 // LocalStorage - Save/Load Palettes
 // ============================================
 
+function getStorageKey() {
+  const userId = state.currentUser ? state.currentUser.id : 'guest';
+  return `${CONFIG.storageKey}_${userId}`;
+}
+
 function loadSavedPalettes() {
   try {
-    const saved = localStorage.getItem(CONFIG.storageKey);
+    const saved = localStorage.getItem(getStorageKey());
     state.savedPalettes = saved ? JSON.parse(saved) : [];
   } catch (e) {
     state.savedPalettes = [];
@@ -303,7 +523,7 @@ function loadSavedPalettes() {
 
 function savePalettesToStorage() {
   try {
-    localStorage.setItem(CONFIG.storageKey, JSON.stringify(state.savedPalettes));
+    localStorage.setItem(getStorageKey(), JSON.stringify(state.savedPalettes));
   } catch (e) {
     console.error('Failed to save palettes:', e);
   }
@@ -342,7 +562,6 @@ function loadPalette(id) {
     state.colors = [...palette.colors];
     state.currentHarmony = palette.harmony;
     state.lockedColors = [false, false, false, false, false];
-
     showView('generator');
     updateAllColumns();
     updateHarmonyIndicator(palette.harmony);
@@ -352,7 +571,6 @@ function loadPalette(id) {
 
 function clearAllPalettes() {
   if (state.savedPalettes.length === 0) return;
-
   state.savedPalettes = [];
   savePalettesToStorage();
   updateSavedBadge();
@@ -361,7 +579,11 @@ function clearAllPalettes() {
 }
 
 function updateSavedBadge() {
-  DOM.savedBadge.textContent = state.savedPalettes.length;
+  const count = state.savedPalettes.length;
+  DOM.savedBadge.textContent = count;
+  if (DOM.savedBadgeMobile) {
+    DOM.savedBadgeMobile.textContent = count;
+  }
 }
 
 // ============================================
@@ -370,6 +592,7 @@ function updateSavedBadge() {
 
 function showView(viewName) {
   state.currentView = viewName;
+  closeMobileMenu();
 
   DOM.generatorView.classList.add('hidden');
   DOM.savedView.classList.add('hidden');
@@ -378,6 +601,11 @@ function showView(viewName) {
   DOM.navGenerator.classList.remove('active');
   DOM.navSaved.classList.remove('active');
   DOM.navAbout.classList.remove('active');
+
+  // Update mobile nav
+  document.querySelectorAll('.mobile-nav-link').forEach(link => {
+    link.classList.toggle('active', link.dataset.view === viewName);
+  });
 
   switch (viewName) {
     case 'generator':
@@ -404,13 +632,12 @@ function renderSavedPalettes() {
   }
 
   DOM.emptyState.classList.add('hidden');
-
-  const html = state.savedPalettes.map(palette => `
+  DOM.savedPalettes.innerHTML = state.savedPalettes.map(palette => `
         <div class="saved-palette-card" data-id="${palette.id}">
             <div class="saved-palette-preview">
-                ${palette.colors.map(color => `
-                    <div class="color-swatch" style="background-color: ${hslToHex(color.h, color.s, color.l)}"></div>
-                `).join('')}
+                ${palette.colors.map(c =>
+    `<div class="color-swatch" style="background-color:${hslToHex(c.h, c.s, c.l)}"></div>`
+  ).join('')}
             </div>
             <div class="saved-palette-info">
                 <div class="saved-palette-meta">
@@ -424,8 +651,6 @@ function renderSavedPalettes() {
             </div>
         </div>
     `).join('');
-
-  DOM.savedPalettes.innerHTML = html;
 }
 
 // ============================================
@@ -437,7 +662,6 @@ function createColumnHTML(index) {
   return `
         <div class="color-column${isLocked ? ' locked' : ''}" data-index="${index}">
             <span class="color-value" data-index="${index}">──────</span>
-            
             <div class="dropdown-container" data-index="${index}">
                 <button class="dropdown-btn" data-index="${index}">
                     <span class="current-format">HEX</span>
@@ -449,25 +673,20 @@ function createColumnHTML(index) {
                     <div class="dropdown-item" data-format="HSL">HSL</div>
                 </div>
             </div>
-            
             <div class="action-buttons">
-                <button class="lock-btn${isLocked ? ' locked' : ''}" data-index="${index}" title="Lock this color">
+                <button class="lock-btn${isLocked ? ' locked' : ''}" data-index="${index}" title="Lock">
                     ${isLocked ? '🔒' : '🔓'}
                 </button>
-                <button class="copy-btn" data-index="${index}" title="Copy to clipboard">
-                    📋
-                </button>
+                <button class="copy-btn" data-index="${index}" title="Copy">📋</button>
             </div>
         </div>
     `;
 }
 
 function initializeColumns() {
-  let columnsHTML = '';
-  for (let i = 0; i < CONFIG.columnCount; i++) {
-    columnsHTML += createColumnHTML(i);
-  }
-  DOM.colorColumns.innerHTML = columnsHTML;
+  DOM.colorColumns.innerHTML = Array.from({ length: CONFIG.columnCount }, (_, i) =>
+    createColumnHTML(i)
+  ).join('');
 }
 
 function updateColumnDisplay(index) {
@@ -512,7 +731,6 @@ function handleGenerate() {
   const { colors, harmonyType } = generatePalette();
   state.colors = colors;
   state.currentHarmony = harmonyType;
-
   updateAllColumns();
   updateHarmonyIndicator(harmonyType);
 }
@@ -524,7 +742,6 @@ function handleLockToggle(event) {
   const index = parseInt(btn.dataset.index);
   state.lockedColors[index] = !state.lockedColors[index];
   updateLockButton(index);
-
   event.stopPropagation();
 }
 
@@ -533,11 +750,9 @@ function handleDropdownToggle(event) {
   if (!btn) return;
 
   const container = btn.closest('.dropdown-container');
-
   document.querySelectorAll('.dropdown-container.open').forEach(el => {
     if (el !== container) el.classList.remove('open');
   });
-
   container.classList.toggle('open');
   event.stopPropagation();
 }
@@ -552,29 +767,20 @@ function handleFormatSelect(event) {
 
   state.selectedFormats[index] = format;
 
-  container.querySelectorAll('.dropdown-item').forEach(el => {
-    el.classList.remove('active');
-  });
+  container.querySelectorAll('.dropdown-item').forEach(el => el.classList.remove('active'));
   item.classList.add('active');
-
   container.querySelector('.current-format').textContent = format;
   container.classList.remove('open');
 
-  if (state.colors.length > 0) {
-    updateColumnDisplay(index);
-  }
-
+  if (state.colors.length > 0) updateColumnDisplay(index);
   event.stopPropagation();
 }
 
 function handleCopy(event) {
   const btn = event.target.closest('.copy-btn');
-  if (!btn) return;
+  if (!btn || state.colors.length === 0) return;
 
   const index = parseInt(btn.dataset.index);
-
-  if (state.colors.length === 0) return;
-
   const color = state.colors[index];
   const format = state.selectedFormats[index];
   const value = getColorValue(color, format);
@@ -582,35 +788,27 @@ function handleCopy(event) {
   navigator.clipboard.writeText(value).then(() => {
     btn.classList.add('copied');
     btn.textContent = '✓';
-
     showToast('Copied to clipboard!');
 
     setTimeout(() => {
       btn.classList.remove('copied');
       btn.textContent = '📋';
     }, CONFIG.toastDuration);
-  }).catch(err => {
-    console.error('Failed to copy:', err);
-  });
+  }).catch(console.error);
 
   event.stopPropagation();
 }
 
 function handleOutsideClick(event) {
   if (!event.target.closest('.dropdown-container')) {
-    document.querySelectorAll('.dropdown-container.open').forEach(el => {
-      el.classList.remove('open');
-    });
+    document.querySelectorAll('.dropdown-container.open').forEach(el => el.classList.remove('open'));
   }
 }
 
 function showToast(message = 'Copied!') {
   DOM.toastText.textContent = message;
   DOM.toast.classList.add('show');
-
-  setTimeout(() => {
-    DOM.toast.classList.remove('show');
-  }, CONFIG.toastDuration);
+  setTimeout(() => DOM.toast.classList.remove('show'), CONFIG.toastDuration);
 }
 
 // ============================================
@@ -618,13 +816,11 @@ function showToast(message = 'Copied!') {
 // ============================================
 
 function setupEventListeners() {
-  // Theme toggle
+  // Theme
   DOM.themeToggle.addEventListener('click', toggleTheme);
 
-  // Generate button
+  // Generate & Save
   DOM.generateBtn.addEventListener('click', handleGenerate);
-
-  // Save button
   DOM.saveBtn.addEventListener('click', saveCurrentPalette);
 
   // Navigation
@@ -632,64 +828,79 @@ function setupEventListeners() {
   DOM.navSaved.addEventListener('click', () => showView('saved'));
   DOM.navAbout.addEventListener('click', () => showView('about'));
 
-  // Go to generator from empty state
+  // Mobile menu
+  DOM.mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+
+  // Mobile navigation
+  DOM.mobileNav.addEventListener('click', (e) => {
+    const link = e.target.closest('.mobile-nav-link');
+    if (link) showView(link.dataset.view);
+  });
+
+  // Go to generator
   if (DOM.goToGenerator) {
     DOM.goToGenerator.addEventListener('click', () => showView('generator'));
   }
 
-  // Clear all button
+  // Clear all
   DOM.clearAllBtn.addEventListener('click', clearAllPalettes);
 
-  // Event delegation for color columns
-  DOM.colorColumns.addEventListener('click', (event) => {
-    if (event.target.closest('.lock-btn')) {
-      handleLockToggle(event);
-      return;
-    }
+  // Auth buttons
+  DOM.loginBtn.addEventListener('click', () => openModal('login'));
+  DOM.signupBtn.addEventListener('click', () => openModal('signup'));
+  DOM.logoutBtn.addEventListener('click', logout);
 
-    if (event.target.closest('.dropdown-btn')) {
-      handleDropdownToggle(event);
-      return;
-    }
+  // Modal
+  DOM.modalClose.addEventListener('click', closeModal);
+  DOM.authModal.addEventListener('click', (e) => {
+    if (e.target === DOM.authModal) closeModal();
+  });
+  DOM.switchToSignup.addEventListener('click', () => openModal('signup'));
+  DOM.switchToLogin.addEventListener('click', () => openModal('login'));
 
-    if (event.target.closest('.dropdown-item')) {
-      handleFormatSelect(event);
-      return;
-    }
+  // Form submissions
+  DOM.loginSubmit.addEventListener('click', handleLoginSubmit);
+  DOM.signupSubmit.addEventListener('click', handleSignupSubmit);
 
-    if (event.target.closest('.copy-btn')) {
-      handleCopy(event);
-      return;
-    }
+  // Enter key on forms
+  DOM.loginPassword.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleLoginSubmit(e);
+  });
+  DOM.signupPassword.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleSignupSubmit(e);
   });
 
-  // Event delegation for saved palettes
+  // Color columns
+  DOM.colorColumns.addEventListener('click', (event) => {
+    if (event.target.closest('.lock-btn')) return handleLockToggle(event);
+    if (event.target.closest('.dropdown-btn')) return handleDropdownToggle(event);
+    if (event.target.closest('.dropdown-item')) return handleFormatSelect(event);
+    if (event.target.closest('.copy-btn')) return handleCopy(event);
+  });
+
+  // Saved palettes
   DOM.savedPalettes.addEventListener('click', (event) => {
     const loadBtn = event.target.closest('.load-btn');
     const deleteBtn = event.target.closest('.delete-btn');
-
-    if (loadBtn) {
-      loadPalette(parseInt(loadBtn.dataset.id));
-      return;
-    }
-
-    if (deleteBtn) {
-      deletePalette(parseInt(deleteBtn.dataset.id));
-      return;
-    }
+    if (loadBtn) loadPalette(parseInt(loadBtn.dataset.id));
+    if (deleteBtn) deletePalette(parseInt(deleteBtn.dataset.id));
   });
 
-  // Close dropdowns on outside click
+  // Outside click
   document.addEventListener('click', handleOutsideClick);
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (event) => {
-    // Space to generate (only in generator view)
+    // Escape to close modal
+    if (event.key === 'Escape' && !DOM.authModal.classList.contains('hidden')) {
+      closeModal();
+      return;
+    }
+
+    // Space to generate
     if (event.code === 'Space' && !event.target.closest('button, input, textarea')) {
       event.preventDefault();
-      if (state.currentView === 'generator') {
-        handleGenerate();
-      }
+      if (state.currentView === 'generator') handleGenerate();
     }
 
     // T to toggle theme
@@ -706,6 +917,7 @@ function setupEventListeners() {
 function init() {
   initializeTheme();
   watchSystemTheme();
+  initializeAuth();
   initializeColumns();
   loadSavedPalettes();
   setupEventListeners();
