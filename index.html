@@ -20,6 +20,9 @@
         <div class="bg-orb bg-orb-3"></div>
     </div>
 
+    <!-- Theme Transition Flash -->
+    <div class="theme-flash" id="themeFlash"></div>
+
     <!-- Header Section -->
     <header class="header">
         <div class="header-content">
@@ -28,7 +31,6 @@
                     <span class="logo-icon">◆</span>
                 </div>
                 <h1>colorCap</h1>
-                <span class="brand-tag">PRO</span>
             </div>
             <nav class="nav-links" id="mainNav">
                 <button class="nav-link active" id="navGenerator">
@@ -113,11 +115,63 @@
             <section class="control-panel">
                 <div class="control-panel-content">
                     <div class="control-left">
-                        <div class="harmony-selector">
+                        <div class="harmony-selector" id="harmonySelector">
                             <span class="harmony-icon">◈</span>
                             <div class="harmony-info">
-                                <span class="harmony-label">Current Harmony</span>
-                                <span class="harmony-type" id="harmonyType">Ready</span>
+                                <span class="harmony-label">Harmony Type</span>
+                                <span class="harmony-type" id="harmonyType">Random</span>
+                            </div>
+                            <span class="harmony-dropdown-arrow">▼</span>
+                            <div class="harmony-dropdown" id="harmonyDropdown">
+                                <div class="harmony-option active" data-harmony="random">
+                                    <span class="harmony-option-icon">⟳</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Random</span>
+                                        <span class="harmony-option-desc">Auto-select harmony</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="monochromatic">
+                                    <span class="harmony-option-icon">◐</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Monochromatic</span>
+                                        <span class="harmony-option-desc">Single hue variations</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="complementary">
+                                    <span class="harmony-option-icon">◑</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Complementary</span>
+                                        <span class="harmony-option-desc">Opposite colors</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="analogous">
+                                    <span class="harmony-option-icon">◔</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Analogous</span>
+                                        <span class="harmony-option-desc">Adjacent colors</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="triadic">
+                                    <span class="harmony-option-icon">△</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Triadic</span>
+                                        <span class="harmony-option-desc">Three equal colors</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="split-complementary">
+                                    <span class="harmony-option-icon">▽</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Split-Complementary</span>
+                                        <span class="harmony-option-desc">Variation of complementary</span>
+                                    </div>
+                                </div>
+                                <div class="harmony-option" data-harmony="tetradic">
+                                    <span class="harmony-option-icon">◇</span>
+                                    <div class="harmony-option-info">
+                                        <span class="harmony-option-name">Tetradic</span>
+                                        <span class="harmony-option-desc">Four-color rectangle</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -147,30 +201,6 @@
                 </div>
             </section>
 
-            <!-- Features Grid -->
-            <section class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">🔒</div>
-                    <div class="feature-content">
-                        <h4>Lock Colors</h4>
-                        <p>Keep favorites while generating</p>
-                    </div>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📋</div>
-                    <div class="feature-content">
-                        <h4>One-Click Copy</h4>
-                        <p>HEX, RGBA, or HSL formats</p>
-                    </div>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
-                    <div class="feature-content">
-                        <h4>Color Theory</h4>
-                        <p>Math-based harmonies</p>
-                    </div>
-                </div>
-            </section>
         </div>
 
         <!-- Saved Palettes View -->
@@ -203,48 +233,40 @@
         <div id="aboutView" class="hidden">
             <section class="about-section">
                 <div class="about-hero">
-                    <div class="about-logo">
-                        <span class="logo-icon-large">◆</span>
-                    </div>
+                    <div class="about-logo"><span class="logo-icon-large">◆</span></div>
                     <h2 class="gradient-text">colorCap</h2>
-                    <p class="about-tagline">The Ultimate Color Harmony Generator</p>
+                    <p class="about-tagline">Mathematical Color Harmony Generator</p>
                 </div>
 
                 <div class="about-grid">
-                    <div class="about-card">
-                        <h3>What is ColorCap?</h3>
-                        <p>A professional color palette generator using mathematical color theory.</p>
+                    <div class="about-card about-card-wide">
+                        <h3>🎨 Professional Palettes</h3>
+                        <p>ColorCap uses mathematical color theory to create harmonious combinations. Built with pure
+                            vanilla technology for maximum performance.</p>
                     </div>
 
                     <div class="about-card">
-                        <h3>Color Harmonies</h3>
-                        <div class="harmony-tags">
-                            <span class="harmony-tag mono">Monochromatic</span>
-                            <span class="harmony-tag comp">Complementary</span>
-                            <span class="harmony-tag tri">Triadic</span>
-                        </div>
-                    </div>
-
-                    <div class="about-card features-about">
-                        <h3>Features</h3>
+                        <h3>✨ Features</h3>
                         <ul class="features-list">
-                            <li>🎨 5-color palettes</li>
-                            <li>🔒 Lock colors</li>
+                            <li>🎨 5-color harmonies</li>
+                            <li>🔒 Color locking</li>
                             <li>📋 Multiple formats</li>
-                            <li>💾 Save palettes</li>
-                            <li>🌙 Dark/Light mode</li>
-                            <li>👤 User accounts</li>
+                            <li>💾 Local storage</li>
+                            <li>🌙 Dark/Light modes</li>
                         </ul>
                     </div>
 
                     <div class="about-card">
-                        <h3>Built With</h3>
-                        <div class="tech-stack">
-                            <span class="tech-badge">HTML5</span>
-                            <span class="tech-badge">CSS3</span>
-                            <span class="tech-badge">Vanilla JS</span>
-                        </div>
+                        <h3>⌨️ Shortcuts</h3>
+                        <ul class="features-list">
+                            <li><strong>Space</strong> — Generate</li>
+                            <li><strong>T</strong> — Toggle Theme</li>
+                        </ul>
                     </div>
+                </div>
+
+                <div class="about-footer-section">
+                    <p>ColorCap © 2026</p>
                 </div>
             </section>
         </div>

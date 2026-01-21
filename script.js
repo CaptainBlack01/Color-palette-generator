@@ -1,42 +1,32 @@
-/**
- * ColorCap - The Ultimate Color Harmony Generator
- * Features: Authentication, Dark/Light mode, Responsive, Save/Load palettes
- */
-
-// ============================================
-// Configuration & Constants
-// ============================================
-
+// --- Configuration ---
 const CONFIG = {
   columnCount: 5,
   formats: ['HEX', 'RGBA', 'HSL'],
-  harmonies: ['monochromatic', 'complementary', 'triadic'],
+  harmonies: ['monochromatic', 'complementary', 'analogous', 'triadic', 'split-complementary', 'tetradic'],
   toastDuration: 1800,
   storageKey: 'colorCap_savedPalettes',
   themeKey: 'colorCap_theme',
   usersKey: 'colorCap_users',
-  currentUserKey: 'colorCap_currentUser'
+  currentUserKey: 'colorCap_currentUser',
+  passwordSalt: 'ColorCap_2026_SecureApp'
 };
 
-// ============================================
-// State Management
-// ============================================
-
+// --- State ---
 const state = {
   colors: [],
   currentHarmony: '',
+  selectedHarmony: 'random',
   selectedFormats: ['HEX', 'HEX', 'HEX', 'HEX', 'HEX'],
   lockedColors: [false, false, false, false, false],
   savedPalettes: [],
   currentView: 'generator',
   theme: 'dark',
   currentUser: null,
-  mobileMenuOpen: false
+  mobileMenuOpen: false,
+  harmonyDropdownOpen: false
 };
 
-// ============================================
-// DOM Elements
-// ============================================
+// --- Elements ---
 
 const DOM = {
   html: document.documentElement,
@@ -95,12 +85,17 @@ const DOM = {
   signupEmail: document.getElementById('signupEmail'),
   signupPassword: document.getElementById('signupPassword'),
   signupError: document.getElementById('signupError'),
-  signupSubmit: document.getElementById('signupSubmit')
+  signupSubmit: document.getElementById('signupSubmit'),
+
+  // Harmony Selector
+  harmonySelector: document.getElementById('harmonySelector'),
+  harmonyDropdown: document.getElementById('harmonyDropdown'),
+
+  // Transitions
+  themeFlash: document.getElementById('themeFlash')
 };
 
-// ============================================
-// Theme Management
-// ============================================
+// --- Theme ---
 
 function initializeTheme() {
   const savedTheme = localStorage.getItem(CONFIG.themeKey);
@@ -123,7 +118,24 @@ function applyTheme(theme) {
 
 function toggleTheme() {
   const newTheme = state.theme === 'dark' ? 'light' : 'dark';
+
+  // Add transition class
+  DOM.html.classList.add('theme-transition');
+
+  // Trigger flash effect
+  if (DOM.themeFlash) {
+    DOM.themeFlash.classList.remove('active');
+    void DOM.themeFlash.offsetWidth; // Trigger reflow
+    DOM.themeFlash.classList.add('active');
+  }
+
+  // Change theme
   applyTheme(newTheme);
+
+  // Remove transition class after animation ends (600ms matching CSS)
+  setTimeout(() => {
+    DOM.html.classList.remove('theme-transition');
+  }, 600);
 }
 
 function watchSystemTheme() {
@@ -135,9 +147,7 @@ function watchSystemTheme() {
   });
 }
 
-// ============================================
-// Authentication System (localStorage-based)
-// ============================================
+// --- Auth ---
 
 function getUsers() {
   try {
@@ -171,17 +181,63 @@ function setCurrentUser(user) {
   updateAuthUI();
 }
 
-function signup(name, email, password) {
+// Security: Input sanitization to prevent XSS
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return '';
+  return input
+    .trim()
+    .replace(/[<>]/g, '') // Remove angle brackets
+    .slice(0, 255); // Limit length
+}
+
+// Security: Simple hash function for client-side password storage
+// Note: In production, use bcrypt on server-side
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + CONFIG.passwordSalt);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Security: Password strength validation
+function validatePassword(password) {
+  if (password.length < 8) {
+    return { valid: false, message: 'Password must be at least 8 characters' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: 'Password must contain an uppercase letter' };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: 'Password must contain a lowercase letter' };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: 'Password must contain a number' };
+  }
+  return { valid: true };
+}
+
+async function signup(name, email, password) {
+  // Sanitize inputs
+  name = sanitizeInput(name);
+  email = sanitizeInput(email);
+
   if (!name || !email || !password) {
     return { success: false, message: 'Please fill all fields' };
+  }
+
+  if (name.length < 2 || name.length > 50) {
+    return { success: false, message: 'Name must be 2-50 characters' };
   }
 
   if (!isValidEmail(email)) {
     return { success: false, message: 'Invalid email format' };
   }
 
-  if (password.length < 4) {
-    return { success: false, message: 'Password too short (min 4 chars)' };
+  // Validate password strength
+  const passwordCheck = validatePassword(password);
+  if (!passwordCheck.valid) {
+    return { success: false, message: passwordCheck.message };
   }
 
   const users = getUsers();
@@ -190,11 +246,14 @@ function signup(name, email, password) {
     return { success: false, message: 'Email already registered' };
   }
 
+  // Hash password before storing
+  const hashedPassword = await hashPassword(password);
+
   const newUser = {
     id: Date.now(),
-    name: name.trim(),
-    email: email.toLowerCase().trim(),
-    password: password, // In real app, this should be hashed
+    name: name,
+    email: email.toLowerCase(),
+    password: hashedPassword,
     createdAt: new Date().toISOString()
   };
 
@@ -207,15 +266,20 @@ function signup(name, email, password) {
   return { success: true };
 }
 
-function login(email, password) {
+async function login(email, password) {
+  // Sanitize email input
+  email = sanitizeInput(email);
+
   if (!email || !password) {
     return { success: false, message: 'Please fill all fields' };
   }
 
   const users = getUsers();
+  const hashedPassword = await hashPassword(password);
+
   const user = users.find(u =>
     u.email.toLowerCase() === email.toLowerCase() &&
-    u.password === password
+    u.password === hashedPassword
   );
 
   if (!user) {
@@ -263,9 +327,7 @@ function initializeAuth() {
   updateAuthUI();
 }
 
-// ============================================
-// Modal Management
-// ============================================
+// --- Modals ---
 
 function openModal(formType = 'login') {
   DOM.authModal.classList.remove('hidden');
@@ -314,11 +376,11 @@ function showFormError(type, message) {
   }
 }
 
-function handleLoginSubmit(e) {
+async function handleLoginSubmit(e) {
   e.preventDefault();
   clearFormErrors();
 
-  const result = login(DOM.loginEmail.value, DOM.loginPassword.value);
+  const result = await login(DOM.loginEmail.value, DOM.loginPassword.value);
 
   if (result.success) {
     closeModal();
@@ -328,11 +390,11 @@ function handleLoginSubmit(e) {
   }
 }
 
-function handleSignupSubmit(e) {
+async function handleSignupSubmit(e) {
   e.preventDefault();
   clearFormErrors();
 
-  const result = signup(
+  const result = await signup(
     DOM.signupName.value,
     DOM.signupEmail.value,
     DOM.signupPassword.value
@@ -346,9 +408,7 @@ function handleSignupSubmit(e) {
   }
 }
 
-// ============================================
-// Mobile Menu
-// ============================================
+// --- Mobile ---
 
 function toggleMobileMenu() {
   state.mobileMenuOpen = !state.mobileMenuOpen;
@@ -362,9 +422,7 @@ function closeMobileMenu() {
   DOM.mobileNav.classList.add('hidden');
 }
 
-// ============================================
-// Color Conversion Utilities
-// ============================================
+// --- Utils ---
 
 function hslToRgb(h, s, l) {
   s /= 100;
@@ -414,9 +472,7 @@ function getColorValue(color, format) {
   }
 }
 
-// ============================================
-// Luminance & Accessibility (WCAG)
-// ============================================
+// --- Accessibility ---
 
 function getRelativeLuminance(h, s, l) {
   const { r, g, b } = hslToRgb(h, s, l);
@@ -432,9 +488,7 @@ function getTextColor(color) {
   return luminance > 0.179 ? 'dark' : 'light';
 }
 
-// ============================================
-// Color Harmony Engine
-// ============================================
+// --- Harmony ---
 
 function generateBaseColor() {
   return {
@@ -482,16 +536,67 @@ function generateTriadic(baseColor) {
   ];
 }
 
+function generateAnalogous(baseColor) {
+  const h1 = normalizeHue(baseColor.h - 30);
+  const h2 = normalizeHue(baseColor.h - 15);
+  const h3 = baseColor.h;
+  const h4 = normalizeHue(baseColor.h + 15);
+  const h5 = normalizeHue(baseColor.h + 30);
+  return [
+    { h: h1, s: baseColor.s - 5, l: 40 },
+    { h: h2, s: baseColor.s, l: 50 },
+    { h: h3, s: baseColor.s + 5, l: 55 },
+    { h: h4, s: baseColor.s, l: 50 },
+    { h: h5, s: baseColor.s - 5, l: 60 }
+  ];
+}
+
+function generateSplitComplementary(baseColor) {
+  const comp1 = normalizeHue(baseColor.h + 150);
+  const comp2 = normalizeHue(baseColor.h + 210);
+  return [
+    { h: baseColor.h, s: baseColor.s, l: 40 },
+    { h: baseColor.h, s: baseColor.s - 10, l: 60 },
+    { h: comp1, s: baseColor.s, l: 50 },
+    { h: comp2, s: baseColor.s, l: 50 },
+    { h: comp2, s: baseColor.s - 10, l: 65 }
+  ];
+}
+
+function generateTetradic(baseColor) {
+  const h1 = baseColor.h;
+  const h2 = normalizeHue(baseColor.h + 90);
+  const h3 = normalizeHue(baseColor.h + 180);
+  const h4 = normalizeHue(baseColor.h + 270);
+  return [
+    { h: h1, s: baseColor.s, l: 45 },
+    { h: h2, s: baseColor.s - 8, l: 55 },
+    { h: h2, s: baseColor.s - 15, l: 70 },
+    { h: h3, s: baseColor.s, l: 50 },
+    { h: h4, s: baseColor.s - 8, l: 55 }
+  ];
+}
+
 function generatePalette() {
   const baseColor = generateBaseColor();
-  const harmonyIndex = Math.floor(Math.random() * CONFIG.harmonies.length);
-  const harmonyType = CONFIG.harmonies[harmonyIndex];
+
+  // Determine which harmony to use
+  let harmonyType;
+  if (state.selectedHarmony === 'random') {
+    const harmonyIndex = Math.floor(Math.random() * CONFIG.harmonies.length);
+    harmonyType = CONFIG.harmonies[harmonyIndex];
+  } else {
+    harmonyType = state.selectedHarmony;
+  }
 
   let newColors;
   switch (harmonyType) {
     case 'monochromatic': newColors = generateMonochromatic(baseColor); break;
     case 'complementary': newColors = generateComplementary(baseColor); break;
+    case 'analogous': newColors = generateAnalogous(baseColor); break;
     case 'triadic': newColors = generateTriadic(baseColor); break;
+    case 'split-complementary': newColors = generateSplitComplementary(baseColor); break;
+    case 'tetradic': newColors = generateTetradic(baseColor); break;
     default: newColors = generateMonochromatic(baseColor);
   }
 
@@ -502,9 +607,7 @@ function generatePalette() {
   return { colors, harmonyType };
 }
 
-// ============================================
-// LocalStorage - Save/Load Palettes
-// ============================================
+// --- Storage ---
 
 function getStorageKey() {
   const userId = state.currentUser ? state.currentUser.id : 'guest';
@@ -586,9 +689,7 @@ function updateSavedBadge() {
   }
 }
 
-// ============================================
-// View Management
-// ============================================
+// --- Views ---
 
 function showView(viewName) {
   state.currentView = viewName;
@@ -653,9 +754,7 @@ function renderSavedPalettes() {
     `).join('');
 }
 
-// ============================================
-// UI Rendering
-// ============================================
+// --- Rendering ---
 
 function createColumnHTML(index) {
   const isLocked = state.lockedColors[index];
@@ -723,9 +822,7 @@ function updateLockButton(index) {
   column.classList.toggle('locked', isLocked);
 }
 
-// ============================================
-// Event Handlers
-// ============================================
+// --- Handlers ---
 
 function handleGenerate() {
   const { colors, harmonyType } = generatePalette();
@@ -803,6 +900,11 @@ function handleOutsideClick(event) {
   if (!event.target.closest('.dropdown-container')) {
     document.querySelectorAll('.dropdown-container.open').forEach(el => el.classList.remove('open'));
   }
+  // Close harmony dropdown
+  if (!event.target.closest('.harmony-selector')) {
+    state.harmonyDropdownOpen = false;
+    DOM.harmonySelector?.classList.remove('open');
+  }
 }
 
 function showToast(message = 'Copied!') {
@@ -811,9 +913,7 @@ function showToast(message = 'Copied!') {
   setTimeout(() => DOM.toast.classList.remove('show'), CONFIG.toastDuration);
 }
 
-// ============================================
-// Event Delegation Setup
-// ============================================
+// --- Listeners ---
 
 function setupEventListeners() {
   // Theme
@@ -844,6 +944,38 @@ function setupEventListeners() {
 
   // Clear all
   DOM.clearAllBtn.addEventListener('click', clearAllPalettes);
+
+  // Harmony selector
+  DOM.harmonySelector.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.harmonyDropdownOpen = !state.harmonyDropdownOpen;
+    DOM.harmonySelector.classList.toggle('open', state.harmonyDropdownOpen);
+  });
+
+  DOM.harmonyDropdown.addEventListener('click', (e) => {
+    const option = e.target.closest('.harmony-option');
+    if (option) {
+      const harmony = option.dataset.harmony;
+      state.selectedHarmony = harmony;
+
+      // Update UI
+      DOM.harmonyDropdown.querySelectorAll('.harmony-option').forEach(opt => opt.classList.remove('active'));
+      option.classList.add('active');
+
+      // Update display text
+      const displayText = harmony === 'random' ? 'Random' : harmony.charAt(0).toUpperCase() + harmony.slice(1).replace('-', ' ');
+      DOM.harmonyType.textContent = displayText;
+
+      // Close dropdown
+      state.harmonyDropdownOpen = false;
+      DOM.harmonySelector.classList.remove('open');
+
+      // Generate new palette with selected harmony
+      handleGenerate();
+
+      showToast(`Harmony: ${displayText}`);
+    }
+  });
 
   // Auth buttons
   DOM.loginBtn.addEventListener('click', () => openModal('login'));
@@ -910,9 +1042,7 @@ function setupEventListeners() {
   });
 }
 
-// ============================================
-// Initialization
-// ============================================
+// --- Init ---
 
 function init() {
   initializeTheme();
